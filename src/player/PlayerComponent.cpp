@@ -438,8 +438,13 @@ bool PlayerComponent::switchDisplayFrameRate()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 bool PlayerComponent::switchDisplayHdr()
 {
+  qDebug() << "Video is HDR:" << m_mediaHdr;
+
   if (!SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "hdr.auto_switch").toBool())
+  {
+    qDebug() << "Not switching to HDR (disabled by settings).";
     return false;
+  }
 
   // As for the refresh rate: don't let a pending restore undo the switch.
   m_restoreDisplayTimer.stop();
@@ -727,7 +732,9 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
           qInfo() << "resuming loading";
           mpv_hook_continue(m_mpv->mpv(), id);
         };
-        if (switchDisplayFrameRate())
+        bool switched = switchDisplayFrameRate();
+        switched = switchDisplayHdr() || switched;
+        if (switched)
         {
           // Now wait for some time for mode change - this is needed because mode changing can take some
           // time, during which the screen is black, and initializing hardware decoding could fail due

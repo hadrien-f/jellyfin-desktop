@@ -271,13 +271,13 @@
         }
 
         /**
-         * "HDR" or "SDR" when direct playing; unknown for a transcode, which the
-         * server may tone-map.
+         * "HDR" or "SDR" of the source; unknown for a transcode, which the server
+         * may tone-map. (mediaSource.TranscodingUrl is set for direct play too.)
          * @private
          */
         tryGetVideoRange(options) {
             const mediaSource = options.mediaSource;
-            if (!mediaSource || !mediaSource.MediaStreams || mediaSource.TranscodingUrl) {
+            if (!mediaSource || !mediaSource.MediaStreams || options.playMethod === 'Transcode') {
                 return null;
             }
             const video = mediaSource.MediaStreams.find((stream) => stream.Type == "Video");
