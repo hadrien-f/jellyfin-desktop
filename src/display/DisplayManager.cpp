@@ -76,6 +76,45 @@ bool DisplayManager::isValidDisplayMode(int display, int mode)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayManager::switchHdrForMedia(int display, bool hdrMedia)
+{
+  if (!hdrMedia || !isValidDisplay(display))
+    return false;
+
+  if (!isHdrCapable(display))
+  {
+    qInfo() << "Not switching to HDR - display" << display << "is not HDR capable.";
+    return false;
+  }
+  if (isHdrEnabled(display))
+    return false;
+
+  qInfo() << "Switching display" << display << "to HDR.";
+  if (!setHdrEnabled(display, true))
+  {
+    qInfo() << "Switching to HDR failed.";
+    return false;
+  }
+  m_hdrSwitchedDisplay = display;
+  return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayManager::restoreHdr()
+{
+  if (m_hdrSwitchedDisplay < 0)
+    return false;
+
+  int display = m_hdrSwitchedDisplay;
+  m_hdrSwitchedDisplay = -1;
+  if (!isValidDisplay(display) || !isHdrEnabled(display))
+    return false;
+
+  qInfo() << "Switching display" << display << "back to SDR.";
+  return setHdrEnabled(display, false);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // refresh: video FPS
 // multiple: display FPS
 bool DisplayManager::isRateMultipleOf(float refresh, float multiple, bool exact)

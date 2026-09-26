@@ -224,12 +224,32 @@ double DisplayComponent::currentRefreshRate()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayComponent::switchToHdrForMedia(bool hdrMedia)
+{
+  initializeDisplayManager();
+
+  if (!m_displayManager)
+    return false;
+
+  int currentDisplay = getApplicationDisplay();
+  if (currentDisplay < 0)
+  {
+    qInfo() << "Not switching HDR - current display not found.";
+    return false;
+  }
+  return m_displayManager->switchHdrForMedia(currentDisplay, hdrMedia);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 bool DisplayComponent::restorePreviousVideoMode()
 {
   initializeDisplayManager();
 
   if (!m_displayManager)
     return false;
+
+  // Independent of the mode: HDR may have been switched without a mode change.
+  m_displayManager->restoreHdr();
 
   if (!m_displayManager->isValidDisplayMode(m_lastDisplay, m_lastVideoMode))
     return false;

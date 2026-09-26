@@ -271,6 +271,20 @@
         }
 
         /**
+         * "HDR" or "SDR" when direct playing; unknown for a transcode, which the
+         * server may tone-map.
+         * @private
+         */
+        tryGetVideoRange(options) {
+            const mediaSource = options.mediaSource;
+            if (!mediaSource || !mediaSource.MediaStreams || mediaSource.TranscodingUrl) {
+                return null;
+            }
+            const video = mediaSource.MediaStreams.find((stream) => stream.Type == "Video");
+            return video?.VideoRange || null;
+        }
+
+        /**
          * @private
          */
         getStreamByIndex(mediaStreams, jellyIndex) {
@@ -321,6 +335,10 @@
                 const fps = this.tryGetFramerate(options);
                 if (fps) {
                     streamdata.frameRate = fps;
+                }
+                const videoRange = this.tryGetVideoRange(options);
+                if (videoRange) {
+                    streamdata.videoRange = videoRange;
                 }
 
                 const player = window.api.player;

@@ -288,6 +288,13 @@
         "default": false
       },
       {
+        "value": "hdr.auto_switch",
+        "display_name": "Display HDR Sync",
+        "help": "Turns HDR on for HDR media and back off after playback. Needs KDE Plasma on Wayland. The default is disabled.",
+        "default": false,
+        "platforms": [ "linux" ]
+      },
+      {
         "value": "refreshrate.delay",
         "default": 3,
         "hidden": true

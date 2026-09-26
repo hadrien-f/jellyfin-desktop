@@ -323,6 +323,8 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   InputComponent::Get().cancelAutoRepeat();
 
   m_mediaFrameRate = metadata["frameRate"].toFloat(); // returns 0 on failure
+  // Sent by the web client only when direct playing: a transcode may be tone-mapped.
+  m_mediaHdr = metadata["videoRange"].toString() == "HDR";
   m_serverMediaInfo = metadata["media"].toMap();
 
   updateVideoConfiguration();
@@ -431,6 +433,17 @@ bool PlayerComponent::switchDisplayFrameRate()
   // Make sure settings dependent on the display refresh rate are updated properly.
   updateVideoConfiguration();
   return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool PlayerComponent::switchDisplayHdr()
+{
+  if (!SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "hdr.auto_switch").toBool())
+    return false;
+
+  // As for the refresh rate: don't let a pending restore undo the switch.
+  m_restoreDisplayTimer.stop();
+  return DisplayComponent::Get().switchToHdrForMedia(m_mediaHdr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -672,7 +685,9 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
           qInfo() << "resuming loading";
           m_mpv->command( QStringList() << "hook-ack" << resumeId);
         };
-        if (switchDisplayFrameRate())
+        bool switched = switchDisplayFrameRate();
+        switched = switchDisplayHdr() || switched;
+        if (switched)
         {
           // Now wait for some time for mode change - this is needed because mode changing can take some
           // time, during which the screen is black, and initializing hardware decoding could fail due

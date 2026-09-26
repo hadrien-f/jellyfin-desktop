@@ -17,6 +17,19 @@ public:
 
   void setCurrentMode(int mode) { m_currentMode = mode; }
 
+  bool isHdrCapable(int) override { return m_hdrCapable; }
+  bool isHdrEnabled(int) override { return m_hdrEnabled; }
+  bool setHdrEnabled(int, bool enable) override
+  {
+    m_hdrSwitches++;
+    m_hdrEnabled = enable;
+    return true;
+  }
+
+  bool m_hdrCapable = true;
+  bool m_hdrEnabled = false;
+  int m_hdrSwitches = 0;
+
   void addMode(int id, int w, int h, int bpp, float hz, bool interlaced)
   {
     auto mode = DMVideoModePtr::create();
@@ -68,6 +81,10 @@ private slots:
   void testFindBestMode();
   void testMultipleRefreshRate();
   void testFindDisplayByName();
+  void testHdrSwitchedOnForHdrMediaAndRestored();
+  void testHdrLeftAloneForSdrMedia();
+  void testHdrAlreadyOnIsNotTurnedOff();
+  void testHdrNotSwitchedWhenIncapable();
 };
 
 // Helper function: Populates a DisplayManager with some typical display modes.
@@ -233,6 +250,59 @@ void TestDisplayManager::testFindDisplayByName()
 
   QCOMPARE(mgr.findDisplayByName("TestDisplay"), 0);
   QCOMPARE(mgr.findDisplayByName("HDMI-A-1"), -1);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void TestDisplayManager::testHdrSwitchedOnForHdrMediaAndRestored()
+{
+  TestableDisplayManager mgr;
+  setupStandardModes(mgr);
+
+  QVERIFY(mgr.switchHdrForMedia(0, true));
+  QVERIFY(mgr.m_hdrEnabled);
+
+  QVERIFY(mgr.restoreHdr());
+  QVERIFY(!mgr.m_hdrEnabled);
+  // Nothing left to restore.
+  QVERIFY(!mgr.restoreHdr());
+  QCOMPARE(mgr.m_hdrSwitches, 2);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void TestDisplayManager::testHdrLeftAloneForSdrMedia()
+{
+  TestableDisplayManager mgr;
+  setupStandardModes(mgr);
+
+  QVERIFY(!mgr.switchHdrForMedia(0, false));
+  QVERIFY(!mgr.restoreHdr());
+  QCOMPARE(mgr.m_hdrSwitches, 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void TestDisplayManager::testHdrAlreadyOnIsNotTurnedOff()
+{
+  // The user runs the desktop in HDR: playback must not change that.
+  TestableDisplayManager mgr;
+  setupStandardModes(mgr);
+  mgr.m_hdrEnabled = true;
+
+  QVERIFY(!mgr.switchHdrForMedia(0, true));
+  QVERIFY(!mgr.restoreHdr());
+  QVERIFY(mgr.m_hdrEnabled);
+  QCOMPARE(mgr.m_hdrSwitches, 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void TestDisplayManager::testHdrNotSwitchedWhenIncapable()
+{
+  TestableDisplayManager mgr;
+  setupStandardModes(mgr);
+  mgr.m_hdrCapable = false;
+
+  QVERIFY(!mgr.switchHdrForMedia(0, true));
+  QVERIFY(!mgr.switchHdrForMedia(7, true)); // no such display
+  QCOMPARE(mgr.m_hdrSwitches, 0);
 }
 
 QTEST_APPLESS_MAIN(TestDisplayManager)

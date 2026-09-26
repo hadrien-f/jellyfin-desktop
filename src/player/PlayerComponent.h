@@ -245,6 +245,8 @@ private:
   // Potentially switch the display refresh rate, and return true if the refresh rate
   // was actually changed.
   bool switchDisplayFrameRate();
+  // Potentially turn HDR on for HDR media, and return true if the output was changed.
+  bool switchDisplayHdr();
   void checkCurrentAudioDevice(const QSet<QString>& old_devs, const QSet<QString>& new_devs);
   void appendAudioFormat(QTextStream& info, const QString& property) const;
   void updateVideoAspectSettings();
@@ -267,6 +269,7 @@ private:
   qint64 m_playbackAudioDelay;
   QQuickWindow* m_window;
   float m_mediaFrameRate;
+  bool m_mediaHdr = false;
   QTimer m_restoreDisplayTimer;
   QTimer m_reloadAudioTimer;
   QSet<QString> m_audioDevices;
