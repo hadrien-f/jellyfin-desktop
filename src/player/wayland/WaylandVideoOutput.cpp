@@ -185,9 +185,14 @@ void WaylandVideoOutput::onVideoSurfaceChanged(bool attached)
     return;
 
   m_videoAttached = attached;
-  // Opaque while browsing, so no stale video or desktop shows behind the UI.
+  // Black while browsing, so no stale video or desktop shows behind the UI,
+  // but never fully opaque: for an opaque colour QQuickWindow::setColor()
+  // drops the alpha channel from the window format, Qt Wayland then declares
+  // the whole surface opaque on its next geometry change (and never clears it
+  // again), and the compositor may present the window's buffer on its own,
+  // without the video below.
   if (m_window)
-    m_window->setColor(attached ? Qt::transparent : Qt::black);
+    m_window->setColor(attached ? QColor(Qt::transparent) : QColor(0, 0, 0, 254));
 
   emit videoAttachedChanged(attached);
 }
