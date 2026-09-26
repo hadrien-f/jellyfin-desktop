@@ -32,6 +32,11 @@ public:
   // Switch to best overall video mode. This will also switch the resolution.
   bool switchToBestOverallVideoMode(int display);
 
+  // Turn HDR on for HDR media on the application's display, where the platform
+  // supports it. Undone by restorePreviousVideoMode(). Return true only if the
+  // output was actually switched.
+  bool switchToHdrForMedia(bool hdrMedia);
+
   // The syntax is as follows: the command string consists of multiple arguments separated
   // by spaces. Each argument can be one of the following:
   //    <N>hz (e.g.: "24hz"): change the refresh rate

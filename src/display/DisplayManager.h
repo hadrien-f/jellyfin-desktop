@@ -119,6 +119,10 @@ public:
   virtual void resetRendering() {}
   // Display showing the window. Defaults to the display under the window center.
   virtual int getDisplayFromWindow(QWindow* window);
+  // HDR output, on platforms that can switch it.
+  virtual bool isHdrCapable(int display) { Q_UNUSED(display); return false; }
+  virtual bool isHdrEnabled(int display) { Q_UNUSED(display); return false; }
+  virtual bool setHdrEnabled(int display, bool enable) { Q_UNUSED(display); Q_UNUSED(enable); return false; }
 
   // other classes functions
   int findBestMatch(int display, DMMatchMediaInfo& matchInfo);
@@ -131,8 +135,17 @@ public:
   int getDisplayFromPoint(const QPoint& pt);
   int findDisplayByName(const QString& name);
 
+  // Turns HDR on for HDR media if the display supports it and it is off.
+  // SDR media never turn HDR off: it may be the user's choice. Returns true
+  // if the output was changed.
+  bool switchHdrForMedia(int display, bool hdrMedia);
+  // Turns HDR back off, if switchHdrForMedia() turned it on.
+  bool restoreHdr();
+
 private:
   bool isRateMultipleOf(float refresh, float multiple, bool exact = true);
+
+  int m_hdrSwitchedDisplay = -1;
 };
 
 typedef QSharedPointer<DisplayManager> DisplayManagerPtr;

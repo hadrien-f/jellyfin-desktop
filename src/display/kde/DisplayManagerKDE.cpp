@@ -47,6 +47,9 @@ public:
   QString m_name;
   bool m_enabled = false;
   bool m_removed = false;
+  uint32_t m_capabilities = 0;
+  bool m_hdr = false;
+  bool m_wideColorGamut = false;
   std::vector<std::unique_ptr<KdeOutputMode>> m_modes;
   KdeOutputMode* m_currentMode = nullptr;
 
@@ -62,6 +65,9 @@ protected:
     m_currentMode = it != m_modes.end() ? it->get() : nullptr;
   }
   void kde_output_device_v2_enabled(int32_t enabled) override { m_enabled = enabled; }
+  void kde_output_device_v2_capabilities(uint32_t flags) override { m_capabilities = flags; }
+  void kde_output_device_v2_high_dynamic_range(uint32_t enabled) override { m_hdr = enabled; }
+  void kde_output_device_v2_wide_color_gamut(uint32_t enabled) override { m_wideColorGamut = enabled; }
   void kde_output_device_v2_name(const QString& name) override { m_name = name; }
   void kde_output_device_v2_removed() override { m_removed = true; }
 };
@@ -111,6 +117,29 @@ protected:
   void kde_output_configuration_v2_applied() override { m_state = State::Applied; }
   void kde_output_configuration_v2_failed() override { m_state = State::Failed; }
 };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Applies a configuration and waits (at most 5 s) for KWin's answer.
+static bool applyConfiguration(wl_display* display, wl_event_queue* queue,
+                               KdeOutputConfiguration& config, const QString& what)
+{
+  config.apply();
+
+  QElapsedTimer timer;
+  timer.start();
+  while (config.m_state == KdeOutputConfiguration::State::Pending && timer.elapsed() < 5000)
+  {
+    if (wl_display_roundtrip_queue(display, queue) < 0)
+      break;
+  }
+
+  if (config.m_state == KdeOutputConfiguration::State::Pending)
+    qWarning() << "No answer from KWin when setting" << what;
+  else if (config.m_state == KdeOutputConfiguration::State::Failed)
+    qWarning() << "KWin refused" << what;
+
+  return config.m_state == KdeOutputConfiguration::State::Applied;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 static const wl_registry_listener s_registryListener = {
@@ -235,23 +264,43 @@ bool DisplayManagerKDE::setDisplayMode(int display, int mode)
 
   KdeOutputConfiguration config(m_management->create_configuration());
   config.mode(device->object(), deviceMode->object());
-  config.apply();
+  return applyConfiguration(m_display, m_queue, config,
+                            "mode " + dmDisplay->m_videoModes[mode]->getPrettyName() + " on " + dmDisplay->m_name);
+}
 
-  QElapsedTimer timer;
-  timer.start();
-  while (config.m_state == KdeOutputConfiguration::State::Pending && timer.elapsed() < 5000)
-  {
-    if (wl_display_roundtrip_queue(m_display, m_queue) < 0)
-      break;
-  }
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayManagerKDE::isHdrCapable(int display)
+{
+  if (!isValidDisplay(display))
+    return false;
+  const auto& device = m_registry->m_devices[m_displays[display]->m_privId];
+  return device->m_capabilities & QtWayland::kde_output_device_v2::capability_high_dynamic_range;
+}
 
-  QString modeName = dmDisplay->m_videoModes[mode]->getPrettyName();
-  if (config.m_state == KdeOutputConfiguration::State::Pending)
-    qWarning() << "No answer from KWin when setting mode" << modeName << "on" << dmDisplay->m_name;
-  else if (config.m_state == KdeOutputConfiguration::State::Failed)
-    qWarning() << "KWin refused mode" << modeName << "on" << dmDisplay->m_name;
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayManagerKDE::isHdrEnabled(int display)
+{
+  if (!isValidDisplay(display))
+    return false;
+  return m_registry->m_devices[m_displays[display]->m_privId]->m_hdr;
+}
 
-  return config.m_state == KdeOutputConfiguration::State::Applied;
+///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayManagerKDE::setHdrEnabled(int display, bool enable)
+{
+  if (!isValidDisplay(display))
+    return false;
+
+  const DMDisplayPtr& dmDisplay = m_displays[display];
+  const auto& device = m_registry->m_devices[dmDisplay->m_privId];
+
+  // Plasma's display settings switch both together; HDR content is BT.2020.
+  KdeOutputConfiguration config(m_management->create_configuration());
+  config.set_high_dynamic_range(device->object(), enable);
+  if (device->m_capabilities & QtWayland::kde_output_device_v2::capability_wide_color_gamut)
+    config.set_wide_color_gamut(device->object(), enable);
+  return applyConfiguration(m_display, m_queue, config,
+                            QString(enable ? "HDR on " : "SDR on ") + dmDisplay->m_name);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

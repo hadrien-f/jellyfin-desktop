@@ -11,8 +11,8 @@ struct wl_registry;
 class KdeOutputDeviceRegistry;
 class KdeOutputManagement;
 
-// Display mode switching for KDE Plasma (KWin) Wayland sessions, using the
-// kde_output_device_v2 and kde_output_management_v2 protocols.
+// Display mode and HDR switching for KDE Plasma (KWin) Wayland sessions, using
+// the kde_output_device_v2 and kde_output_management_v2 protocols.
 class DisplayManagerKDE : public DisplayManager
 {
   Q_OBJECT
@@ -26,6 +26,9 @@ public:
   int getMainDisplay() override;
   int getDisplayFromPoint(int x, int y) override;
   int getDisplayFromWindow(QWindow* window) override;
+  bool isHdrCapable(int display) override;
+  bool isHdrEnabled(int display) override;
+  bool setHdrEnabled(int display, bool enable) override;
 
   // Called from the wl_registry listener.
   void bindGlobal(uint32_t name, const char* interface, uint32_t version);
