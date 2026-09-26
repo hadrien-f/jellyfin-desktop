@@ -358,6 +358,7 @@
       {
         "value": "force_transcode_dovi",
         "display_name": "Force Transcode Dolby Vision",
+        "help": "Transcode Dolby Vision profile 5 media when this player can't render it. Players using mpv's own Wayland video output render it directly.",
         "default": true
       },
       {

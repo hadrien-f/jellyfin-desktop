@@ -30,6 +30,7 @@
 #include "settings/SettingsSection.h"
 #include "Paths.h"
 #include "core/ProfileManager.h"
+#include "player/PlayerComponent.h"
 #include "Names.h"
 #include "utils/Utils.h"
 #include "utils/Log.h"
@@ -578,6 +579,12 @@ QString SystemComponent::getNativeShellScript()
   clientData.insert("sections", QJsonValue::fromVariant(SettingsComponent::Get().orderedSections()));
   clientData.insert("settingsDescriptions", QJsonValue::fromVariant(settingsDescriptions));
   clientData.insert("settings", QJsonValue::fromVariant(SettingsComponent::Get().allValues()));
+
+  // What the active video backend can render, for the device profile.
+  QJsonObject player;
+  player.insert("doviCapable",
+                PlayerComponent::Get().videoBackend() == VideoBackend::WaylandSubsurface);
+  clientData.insert("player", player);
 
   QString jmpInfoDeclaration = "const jmpInfo = JSON.parse(window.atob(\"" +
                                 QJsonDocument(clientData).toJson(QJsonDocument::Compact).toBase64() +

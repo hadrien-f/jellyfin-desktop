@@ -64,7 +64,9 @@ window.NativeShell = {
 function getDeviceProfile() {
     const CodecProfiles = [];
 
-    if (jmpInfo.settings.video.force_transcode_dovi) {
+    // Profile 5 Dolby Vision has no HDR10/SDR fallback layer; it only looks right
+    // where the player applies the Dolby Vision reshaping itself (mpv gpu-next).
+    if (jmpInfo.settings.video.force_transcode_dovi && !jmpInfo.player.doviCapable) {
         CodecProfiles.push({
             'Type': 'Video',
             'Conditions': [
