@@ -496,6 +496,11 @@ int main(int argc, char *argv[])
     // Set user agent now that SystemComponent is available
     QWebEngineProfile::defaultProfile()->setHttpUserAgent(SystemComponent::Get().getUserAgent());
 
+    // mpv's own video output is a subsurface below the window; it shows through
+    // wherever the window is transparent, which needs an alpha channel.
+    if (PlayerComponent::Get().videoBackend() == VideoBackend::WaylandSubsurface)
+      QQuickWindow::setDefaultAlphaBuffer(true);
+
     // load QtWebChannel so that we can register our components with it.
     QQmlApplicationEngine *engine = Globals::Engine();
 

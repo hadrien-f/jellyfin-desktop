@@ -10,14 +10,17 @@
 #include <QTextStream>
 
 #include <functional>
+#include <optional>
 
 #include "ComponentManager.h"
 #include "QtHelper.h"
+#include "VideoBackend.h"
 
 #include <mpv/client.h>
 
 class MpvController;
 class AlbumArtProvider;
+class WaylandVideoOutput;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 class PlayerComponent : public ComponentBase
@@ -137,6 +140,9 @@ public:
   void initializeMpv();
 
   virtual void setWindow(QQuickWindow* window);
+
+  // Decided once, on first use; needs the QGuiApplication and the settings.
+  VideoBackend videoBackend();
 
   QString videoInformation() const;
 
@@ -278,6 +284,9 @@ private:
   QVariantList m_queuedItems;
 
   AlbumArtProvider* m_albumArtProvider;
+
+  std::optional<VideoBackend> m_videoBackend;
+  WaylandVideoOutput* m_waylandVideo = nullptr;
 };
 
 #endif // PLAYERCOMPONENT_H

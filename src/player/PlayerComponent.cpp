@@ -15,6 +15,9 @@
 
 #include "MpvVideoItem.h"
 #include "AlbumArtProvider.h"
+#ifdef USE_WAYLAND_HDR
+#include "wayland/WaylandVideoOutput.h"
+#endif
 #include "input/InputComponent.h"
 #include <MpvController>
 
@@ -99,8 +102,9 @@ void PlayerComponent::initializeMpv()
 
   mpv_set_wakeup_callback(m_mpv->mpv(), wakeup_cb, this);
 
-  // Keep window open even when idle (no file loaded)
-  m_mpv->setProperty("force-window", true);
+  // Keep window open even when idle (no file loaded). mpv's own Wayland VO is
+  // created per playback instead, so no video buffers are held while browsing.
+  m_mpv->setProperty("force-window", videoBackend() == VideoBackend::LibmpvRender);
 
   // Disable native OSD if mpv_command_string() is used.
   m_mpv->setProperty("osd-level", "0");
@@ -266,11 +270,38 @@ void PlayerComponent::setWindow(QQuickWindow* window)
   if (forceVo.size())
     vo = forceVo;
 
-  // MpvQt sets vo=libmpv in MpvVideoItem constructor
+  // MpvVideoItem's constructor sets the VO matching videoBackend().
   // Don't set it here since m_mpv may be null (MpvQt not ready yet)
+
+#ifdef USE_WAYLAND_HDR
+  if (videoBackend() == VideoBackend::WaylandSubsurface)
+    m_waylandVideo = new WaylandVideoOutput(window);
+#endif
 
   if (vo == "libmpv")
     setQtQuickWindow(window);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+VideoBackend PlayerComponent::videoBackend()
+{
+  if (!m_videoBackend)
+  {
+    VideoBackendEnvironment env;
+#ifdef USE_WAYLAND_HDR
+    env.waylandSubsurfaceBuilt = true;
+    env.waylandSession = QGuiApplication::platformName() == QLatin1String("wayland");
+    env.compositorColorManagement =
+      env.waylandSession && WaylandVideoOutput::compositorSupportsColorManagement();
+#endif
+    env.forcedVo = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "debug.force_vo").toString();
+
+    m_videoBackend = selectVideoBackend(env);
+    bool subsurface = *m_videoBackend == VideoBackend::WaylandSubsurface;
+    qInfo() << "Video backend:"
+            << (subsurface ? "mpv gpu-next in a Wayland subsurface" : "libmpv render API");
+  }
+  return *m_videoBackend;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -335,6 +366,12 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   extraArgs += "vd="; // Keep last
 
   command << extraArgs;
+
+#ifdef USE_WAYLAND_HDR
+  // Music creates no VO, so there is nothing to point at the translator.
+  if (m_waylandVideo && metadata["type"] != "music" && !m_waylandVideo->prepareForPlayback())
+    qWarning() << "Wayland video output unavailable; mpv will open a window of its own";
+#endif
 
   m_mpv->command( command);
 
@@ -529,6 +566,11 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       if (!m_streamSwitchImminent)
         m_restoreDisplayTimer.start(0);
       m_streamSwitchImminent = false;
+
+#ifdef USE_WAYLAND_HDR
+      if (m_waylandVideo)
+        m_waylandVideo->playbackEnded();
+#endif
       break;
     }
     case MPV_EVENT_PROPERTY_CHANGE:

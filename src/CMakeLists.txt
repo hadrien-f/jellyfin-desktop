@@ -237,6 +237,30 @@ if(KDEWAYLAND_FOUND)
   target_link_libraries(jmp_core Qt6::WaylandClient)
 endif()
 
+if(WAYLANDHDR_FOUND)
+  # The translator serves mpv too, so it needs server code as well as the
+  # interface tables; Qt's client-only generator doesn't cover that.
+  foreach(protocol ${WAYLANDHDR_PROTOCOLS})
+    get_filename_component(name ${protocol} NAME_WE)
+    set(xml ${WAYLAND_PROTOCOLS_DIR}/${protocol})
+    set(code ${CMAKE_CURRENT_BINARY_DIR}/${name}-protocol.c)
+    add_custom_command(OUTPUT ${code}
+      COMMAND ${WAYLAND_SCANNER} private-code ${xml} ${code}
+      DEPENDS ${xml} VERBATIM)
+    target_sources(jmp_core PRIVATE ${code})
+  endforeach()
+  set(xdg_shell_xml ${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml)
+  set(xdg_shell_header ${CMAKE_CURRENT_BINARY_DIR}/xdg-shell-server-protocol.h)
+  add_custom_command(OUTPUT ${xdg_shell_header}
+    COMMAND ${WAYLAND_SCANNER} server-header ${xdg_shell_xml} ${xdg_shell_header}
+    DEPENDS ${xdg_shell_xml} VERBATIM)
+  target_sources(jmp_core PRIVATE ${xdg_shell_header})
+  target_link_libraries(jmp_core PkgConfig::WAYLAND)
+  if(TARGET Qt6::GuiPrivate)
+    target_link_libraries(jmp_core Qt6::GuiPrivate)
+  endif()
+endif()
+
 # Delay-load libmpv on Windows for runtime AVX2 fallback
 if(WIN32)
   target_link_libraries(jmp_core delayimp.lib)
