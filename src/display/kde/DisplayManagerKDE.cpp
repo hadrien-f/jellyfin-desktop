@@ -50,6 +50,9 @@ public:
   uint32_t m_capabilities = 0;
   bool m_hdr = false;
   bool m_wideColorGamut = false;
+  uint32_t m_sdrBrightness = 0;       // cd/m², since version 3
+  uint32_t m_maxPeakBrightness = 0;   // cd/m², from the EDID, since version 6
+  int32_t m_peakBrightnessOverride = -1; // cd/m², set by the user in Plasma, -1 if none
   std::vector<std::unique_ptr<KdeOutputMode>> m_modes;
   KdeOutputMode* m_currentMode = nullptr;
 
@@ -68,6 +71,15 @@ protected:
   void kde_output_device_v2_capabilities(uint32_t flags) override { m_capabilities = flags; }
   void kde_output_device_v2_high_dynamic_range(uint32_t enabled) override { m_hdr = enabled; }
   void kde_output_device_v2_wide_color_gamut(uint32_t enabled) override { m_wideColorGamut = enabled; }
+  void kde_output_device_v2_sdr_brightness(uint32_t nits) override { m_sdrBrightness = nits; }
+  void kde_output_device_v2_brightness_metadata(uint32_t maxPeak, uint32_t, uint32_t) override
+  {
+    m_maxPeakBrightness = maxPeak;
+  }
+  void kde_output_device_v2_brightness_overrides(int32_t maxPeak, int32_t, int32_t) override
+  {
+    m_peakBrightnessOverride = maxPeak;
+  }
   void kde_output_device_v2_name(const QString& name) override { m_name = name; }
   void kde_output_device_v2_removed() override { m_removed = true; }
 };
@@ -301,6 +313,28 @@ bool DisplayManagerKDE::setHdrEnabled(int display, bool enable)
     config.set_wide_color_gamut(device->object(), enable);
   return applyConfiguration(m_display, m_queue, config,
                             QString(enable ? "HDR on " : "SDR on ") + dmDisplay->m_name);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+qreal DisplayManagerKDE::sdrWhiteLevel(int display)
+{
+  if (!isValidDisplay(display))
+    return 0;
+  // Pick up changes made in Plasma's settings since the last dispatch.
+  wl_display_roundtrip_queue(m_display, m_queue);
+  return m_registry->m_devices[m_displays[display]->m_privId]->m_sdrBrightness;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+qreal DisplayManagerKDE::peakLuminance(int display)
+{
+  if (!isValidDisplay(display))
+    return 0;
+  wl_display_roundtrip_queue(m_display, m_queue);
+  const auto& device = m_registry->m_devices[m_displays[display]->m_privId];
+  // The user's override in Plasma's display settings wins over the EDID value.
+  return device->m_peakBrightnessOverride > 0 ? device->m_peakBrightnessOverride
+                                              : device->m_maxPeakBrightness;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

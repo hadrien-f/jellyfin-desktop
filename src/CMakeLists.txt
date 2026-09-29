@@ -59,7 +59,7 @@ file(GLOB_RECURSE RESOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/resources
 file(GLOB_RECURSE NATIVE_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/native/*)
 
 # Generate resources - runs rcc, only writes output if changed
-# Note: webview.qml is handled separately via qt_add_qml_module for AOT compilation
+# Note: MainView.qml is handled separately via qt_add_qml_module for AOT compilation
 add_custom_target(generate_resources ALL
   COMMAND ${CMAKE_COMMAND}
           -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/qrc_resources.cpp
@@ -153,13 +153,13 @@ if(APPLE AND MACOS_LAUNCH_WRAPPER)
 endif()
 
 # QML module for AOT compilation (eliminates runtime qmlcache)
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
-  PROPERTIES QT_RESOURCE_ALIAS webview.qml
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/MainView.qml
+  PROPERTIES QT_RESOURCE_ALIAS MainView.qml
 )
 qt_add_qml_module(${MAIN_TARGET}
   URI Konvergo
   VERSION 1.0
-  QML_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
+  QML_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ui/MainView.qml
   NO_RESOURCE_TARGET_PATH
 )
 

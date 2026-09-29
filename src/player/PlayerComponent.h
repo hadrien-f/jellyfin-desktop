@@ -17,6 +17,7 @@
 #include <mpv/client.h>
 
 class MpvController;
+class VideoWindow;
 class AlbumArtProvider;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -130,11 +131,8 @@ public:
 
   AlbumArtProvider* albumArtProvider() const { return m_albumArtProvider; }
 
-  void setMpvController(MpvController* controller) {
-    if (!m_mpv)
-      m_mpv = controller;
-  }
-  void initializeMpv();
+  // The window mpv renders into and that owns mpv. Set before setWindow().
+  void setVideoWindow(VideoWindow* window) { m_videoWindow = window; }
 
   virtual void setWindow(QQuickWindow* window);
 
@@ -233,7 +231,7 @@ private:
   // * viewOffset
   //
   void loadWithOptions(const QVariantMap& options);
-  void setQtQuickWindow(QQuickWindow* window);
+  void initializeMpv();
   void updatePlaybackState();
   void handleMpvEvent(mpv_event *event);
   // Potentially switch the display refresh rate, and return true if the refresh rate
@@ -244,10 +242,13 @@ private:
   void checkCurrentAudioDevice(const QSet<QString>& old_devs, const QSet<QString>& new_devs);
   void appendAudioFormat(QTextStream& info, const QString& property) const;
   void updateVideoAspectSettings();
+  // HDR only: mpv's target peak and the UI white from the display.
+  void updateHdrTarget();
   QVariantList findStreamsForURL(const QString &url);
   void reselectStream(const QVariant &streamSelection, MediaType target);
 
   MpvController* m_mpv = nullptr;
+  VideoWindow* m_videoWindow = nullptr;
 
   State m_state;
   bool m_paused;

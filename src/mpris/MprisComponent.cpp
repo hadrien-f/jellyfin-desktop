@@ -6,7 +6,6 @@
 #include "input/InputComponent.h"
 #include "system/SystemComponent.h"
 #include "settings/SettingsComponent.h"
-#include "core/Globals.h"
 #include "core/ProfileManager.h"
 #include "ui/WindowManager.h"
 
@@ -214,12 +213,7 @@ bool MprisComponent::canControl() const
 
 void MprisComponent::Raise()
 {
-  QQuickWindow* window = Globals::MainWindow();
-  if (window)
-  {
-    window->raise();
-    window->requestActivate();
-  }
+  WindowManager::Get().raiseWindow();
 }
 
 void MprisComponent::Quit()

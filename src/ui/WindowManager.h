@@ -29,8 +29,10 @@ public:
   bool componentInitialize() override { return true; }
   void componentPostInitialize() override;
 
-  // Called from main.cpp after window created
-  void initializeWindow(QQuickWindow* window);
+  // Called from main.cpp after the window is created. window is the top-level window
+  // (VideoWindow), scene the offscreen Qt Quick window the QML root renders in, and
+  // view the QML root (it carries the webUrl, debugInfo, ... properties).
+  void initializeWindow(QWindow* window, QQuickWindow* scene, QObject* view);
 
   // Always on top
   Q_INVOKABLE void setAlwaysOnTop(bool enable);
@@ -104,7 +106,9 @@ private:
 
   void enforceZoom();
 
-  QQuickWindow* m_window;
+  QWindow* m_window;
+  QQuickWindow* m_scene;
+  QObject* m_view;
   QQuickItem* m_webView;
   bool m_enforcingZoom;
   QString m_currentScreenName;

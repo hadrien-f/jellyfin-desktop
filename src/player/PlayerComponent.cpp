@@ -13,7 +13,8 @@
 #include "ComponentManager.h"
 #include "settings/SettingsSection.h"
 
-#include "MpvVideoItem.h"
+#include "VideoWindow.h"
+#include <QQuickItem>
 #include "AlbumArtProvider.h"
 #include "input/InputComponent.h"
 #include <MpvController>
@@ -52,10 +53,6 @@ PlayerComponent::PlayerComponent(QObject* parent)
   m_videoRectangle(-1, 0, 0, 0),
   m_albumArtProvider(new AlbumArtProvider(this))
 {
-  qmlRegisterType<MpvVideoItem>("Konvergo", 1, 0, "MpvVideo"); // deprecated name
-  qmlRegisterType<MpvVideoItem>("Konvergo", 1, 0, "KonvergoVideo");
-  qmlRegisterType<MpvVideoItem>("Konvergo", 1, 0, "MpvVideoItem");
-
   m_restoreDisplayTimer.setSingleShot(true);
   connect(&m_restoreDisplayTimer, &QTimer::timeout, this, &PlayerComponent::onRestoreDisplay);
 
@@ -74,14 +71,13 @@ void PlayerComponent::componentPostInitialize()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PlayerComponent::~PlayerComponent()
 {
-  // m_mpv is owned by MpvVideoItem, don't access it here as it may be destroyed
+  // m_mpv is owned by VideoWindow, don't access it here as it may be destroyed
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 bool PlayerComponent::componentInitialize()
 {
-  // Defer mpv creation until setQtQuickWindow() where we get MpvQt's handle
-  // m_mpv will be set via setMpvHandle() called from MpvVideoItem::initMpv()
+  // mpv comes from VideoWindow, in setWindow()
   return true;
 }
 
@@ -92,12 +88,20 @@ void PlayerComponent::initializeMpv()
     throw FatalException(tr("Failed to load mpv."));
 
   // MpvQt already called mpv_initialize(), so mpv is ready
-  // Properties that needed to be set before init were set in MpvVideoItem constructor
 
   mpv_request_log_messages(m_mpv->mpv(), "terminal-default");
   m_mpv->setProperty("msg-level", "all=v");
 
   mpv_set_wakeup_callback(m_mpv->mpv(), wakeup_cb, this);
+
+  if (m_videoWindow->isHdr())
+  {
+    // VideoWindow's surface is BT.2020 / PQ: render everything, SDR included, in it.
+    m_mpv->setProperty("target-trc", "pq");
+    m_mpv->setProperty("target-prim", "bt.2020");
+  }
+  // Before force-window: the VO needs the render context to open.
+  m_videoWindow->startVideo();
 
   // Keep window open even when idle (no file loaded)
   m_mpv->setProperty("force-window", true);
@@ -235,42 +239,18 @@ void PlayerComponent::setVideoRectangle(int x, int y, int w, int h)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PlayerComponent::setQtQuickWindow(QQuickWindow* window)
-{
-  qDebug() << "PlayerComponent::setQtQuickWindow called";
-  MpvVideoItem* video = window->findChild<MpvVideoItem*>("video");
-  if (!video) {
-    qCritical() << "Failed to find MpvVideoItem with objectName 'video'";
-    throw FatalException(tr("Failed to load video element."));
-  }
-
-  qDebug() << "Found MpvVideoItem, calling setPlayerComponent";
-  video->setPlayerComponent(this);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setWindow(QQuickWindow* window)
 {
-  QString vo = "libmpv";
-
 #ifdef TARGET_RPI
   window->setFlags(Qt::FramelessWindowHint);
-  vo = "rpi";
 #endif
 
   m_window = window;
-  if (!window)
+  if (!window || m_mpv)
     return;
 
-  QString forceVo = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "debug.force_vo").toString();
-  if (forceVo.size())
-    vo = forceVo;
-
-  // MpvQt sets vo=libmpv in MpvVideoItem constructor
-  // Don't set it here since m_mpv may be null (MpvQt not ready yet)
-
-  if (vo == "libmpv")
-    setQtQuickWindow(window);
+  m_mpv = m_videoWindow->mpvController();
+  initializeMpv();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1450,7 +1430,26 @@ void PlayerComponent::updateVideoAspectSettings()
 void PlayerComponent::updateVideoConfiguration()
 {
   setVideoConfiguration();
+  updateHdrTarget();
+  // Last, so that the user's own mpv options win.
   setOtherConfiguration();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void PlayerComponent::updateHdrTarget()
+{
+  if (!m_mpv || !m_videoWindow->isHdr())
+    return;
+
+  // What the display can show, so mpv tone-maps brighter content itself; Plasma's
+  // display settings are where the user calibrates it. Read at each file start.
+  qreal peak = DisplayComponent::Get().peakLuminance();
+  m_mpv->setProperty("target-peak", peak > 0 ? QString::number(peak) : QString("auto"));
+
+  qreal sdrWhite = DisplayComponent::Get().sdrWhiteLevel();
+  if (sdrWhite > 0)
+    m_videoWindow->setSdrWhiteLevel(sdrWhite);
+  qInfo() << "HDR target: peak" << peak << "SDR white" << sdrWhite << "(0: unknown)";
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

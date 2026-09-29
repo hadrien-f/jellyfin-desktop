@@ -64,9 +64,10 @@ static QString keyEventToKeyString(QKeyEvent *kevent)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 bool EventFilter::eventFilter(QObject* watched, QEvent* event)
 {
-  QQuickWindow* window = qobject_cast<QQuickWindow*>(parent());
+  // The QML root (MainView).
+  QObject* view = parent();
 
-  if (window && window->property("webDesktopMode").toBool())
+  if (view && view->property("webDesktopMode").toBool())
   {
     // For desktop mode we don't want fullblown keyboard handling in
     // the host yet. We just want to handle some specific keyboard
@@ -110,7 +111,7 @@ bool EventFilter::eventFilter(QObject* watched, QEvent* event)
         // to prevent WebEngine from interpreting press-without-release as a long-press
         if (event->type() == QEvent::MouseButtonRelease)
         {
-          QQuickItem* webView = window->findChild<QQuickItem*>("web");
+          QQuickItem* webView = view->findChild<QQuickItem*>("web");
 
           if (mouseEvent->button() == Qt::BackButton)
             QMetaObject::invokeMethod(webView, "goBack");

@@ -12,6 +12,7 @@ class EventFilter : public QObject
 {
   Q_OBJECT
 public:
+  // parent: the QML root object, which carries webDesktopMode and the "web" item.
   explicit EventFilter(QObject* parent = nullptr) : QObject(parent), m_currentKeyDown(false) {}
 
 protected:

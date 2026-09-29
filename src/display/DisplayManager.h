@@ -123,6 +123,9 @@ public:
   virtual bool isHdrCapable(int display) { Q_UNUSED(display); return false; }
   virtual bool isHdrEnabled(int display) { Q_UNUSED(display); return false; }
   virtual bool setHdrEnabled(int display, bool enable) { Q_UNUSED(display); Q_UNUSED(enable); return false; }
+  // Luminance of the display's SDR white and its peak, in cd/m², or 0 when unknown.
+  virtual qreal sdrWhiteLevel(int display) { Q_UNUSED(display); return 0; }
+  virtual qreal peakLuminance(int display) { Q_UNUSED(display); return 0; }
 
   // other classes functions
   int findBestMatch(int display, DMMatchMediaInfo& matchInfo);

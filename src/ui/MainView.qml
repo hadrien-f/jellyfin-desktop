@@ -1,22 +1,19 @@
 import QtQuick
-import Konvergo 1.0
 import QtWebEngine
 import QtWebChannel
 import QtQuick.Window
 import QtQuick.Controls
 import Qt.labs.platform as Labs
 
-Window
+// The application's content: the web client, with the host actions. VideoWindow
+// renders it on top of the video; window actions go through hostWindow, that window.
+Item
 {
-  id: mainWindow
-  title: "Jellyfin Desktop"
-  objectName: "mainWindow"
-  width: 1280
-  height: 720
-  minimumWidth: 213
-  minimumHeight: 120
-  visible: true
-  color: "#000000"
+  id: mainView
+  objectName: "mainView"
+
+  // The top-level VideoWindow (set by main.cpp).
+  property var hostWindow: null
 
   // Properties previously from KonvergoWindow
   property bool webDesktopMode: true
@@ -36,16 +33,8 @@ Window
     }
   }
 
-  onClosing: function(close) {
-    if (showSystemTrayIcon) {
-      // Minimize to tray on close.
-      close.accepted = false
-      mainWindow.hide()
-    }
-  }
-
   function toggleFullscreen() {
-    visibility = (visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
+    hostWindow.visibility = (hostWindow.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen
   }
 
   function toggleDebug() {
@@ -53,35 +42,35 @@ Window
   }
 
   function setFullScreen(enable) {
-    visibility = enable ? Window.FullScreen : Window.Windowed
+    hostWindow.visibility = enable ? Window.FullScreen : Window.Windowed
   }
 
   function minimizeWindow() {
-    if (visibility !== Window.FullScreen)
-      visibility = Window.Minimized
+    if (hostWindow.visibility !== Window.FullScreen)
+      hostWindow.visibility = Window.Minimized
   }
 
   function restoreWindow() {
-    mainWindow.show()
-    mainWindow.raise()
-    mainWindow.requestActivate()
+    hostWindow.show()
+    hostWindow.raise()
+    hostWindow.requestActivate()
   }
 
   function runWebAction(action)
   {
-    if (mainWindow.webDesktopMode)
+    if (mainView.webDesktopMode)
       web.triggerWebAction(action)
   }
 
   Action
   {
-    enabled: mainWindow.webDesktopMode
+    enabled: mainView.webDesktopMode
     shortcut:
     {
       if (components.system.isMacos) return "Ctrl+Meta+F"
       return "F11"
     }
-    onTriggered: mainWindow.toggleFullscreen()
+    onTriggered: mainView.toggleFullscreen()
   }
 
   Action
@@ -89,33 +78,33 @@ Window
     shortcut: "Alt+Return"
     enabled:
     {
-      if (mainWindow.webDesktopMode && components.system.isWindows)
+      if (mainView.webDesktopMode && components.system.isWindows)
         return true;
       return false;
     }
-    onTriggered: mainWindow.toggleFullscreen()
+    onTriggered: mainView.toggleFullscreen()
   }
 
   Action
   {
-    enabled: mainWindow.webDesktopMode
+    enabled: mainView.webDesktopMode
     shortcut: StandardKey.Close
-    onTriggered: mainWindow.close()
+    onTriggered: hostWindow.close()
   }
 
   Action
   {
-    enabled: mainWindow.webDesktopMode
+    enabled: mainView.webDesktopMode
     shortcut: {
       if (components.system.isMacos) return "Ctrl+M";
       return "Meta+Down";
     }
-    onTriggered: mainWindow.minimizeWindow()
+    onTriggered: mainView.minimizeWindow()
   }
 
   Action
   {
-    enabled: mainWindow.webDesktopMode
+    enabled: mainView.webDesktopMode
     shortcut: components.system.isWindows ? "Ctrl+Q" : StandardKey.Quit
     onTriggered: Qt.quit()
   }
@@ -123,8 +112,8 @@ Window
   Action
   {
     shortcut: "Ctrl+Shift+D"
-    enabled: mainWindow.webDesktopMode
-    onTriggered: mainWindow.toggleDebug()
+    enabled: mainView.webDesktopMode
+    onTriggered: mainView.toggleDebug()
   }
 
   Action
@@ -185,7 +174,7 @@ Window
 
   Action
   {
-    enabled: mainWindow.webDesktopMode
+    enabled: mainView.webDesktopMode
     shortcut: "Ctrl+0"
     onTriggered: web.zoomFactor = 1.0
   }
@@ -203,31 +192,11 @@ Window
     when: !components.settings.allowBrowserZoom()
   }
 
-  MpvVideoItem
-  {
-    id: video
-    objectName: "video"
-    enabled: true
-
-    width: mainWindow.contentItem.width
-    height: mainWindow.contentItem.height
-    anchors.left: mainWindow.contentItem.left
-    anchors.right: mainWindow.contentItem.right
-    anchors.top: mainWindow.contentItem.top
-
-    Component.onCompleted: {
-      console.log("MpvVideoItem size:", width, "x", height, "visible:", visible)
-    }
-    onWidthChanged: console.log("MpvVideoItem width changed:", width)
-    onHeightChanged: console.log("MpvVideoItem height changed:", height)
-  }
-
   WebEngineView
   {
     id: web
     objectName: "web"
-    width: mainWindow.width
-    height: mainWindow.height
+    anchors.fill: parent
     z: 100
     backgroundColor: "transparent"
 
@@ -243,7 +212,7 @@ Window
     settings.playbackRequiresUserGesture: false
     profile.httpUserAgent: components.system.getUserAgent()
     profile.httpCacheType: WebEngineProfile.DiskHttpCache
-    url: mainWindow.webUrl
+    url: mainView.webUrl
     focus: true
     property string currentHoveredUrl: ""
     onLinkHovered: function(hoveredUrl)
@@ -258,7 +227,7 @@ Window
     {
       console.log("WebEngineView size:", width, "x", height, "backgroundColor:", backgroundColor)
       forceActiveFocus()
-      mainWindow.reloadWebClient.connect(reload)
+      mainView.reloadWebClient.connect(reload)
 
       // Handle CSP workaround from C++
       components.system.pageContentReady.connect(function(html, finalUrl, hadCSP) {
@@ -315,7 +284,7 @@ Window
     onFullScreenRequested:
     {
       console.log("Request fullscreen: " + request.toggleOn)
-      mainWindow.setFullScreen(request.toggleOn)
+      mainView.setFullScreen(request.toggleOn)
       request.accept()
     }
 
@@ -370,7 +339,7 @@ Window
     width: parent.width
     height: parent.height
     opacity: 0.7
-    visible: mainWindow.showDebugLayer
+    visible: mainView.showDebugLayer
 
     Text
     {
@@ -388,7 +357,7 @@ Window
 
       function windowDebug()
       {
-        var dbg = mainWindow.debugInfo + "Window and web\n";
+        var dbg = mainView.debugInfo + "Window and web\n";
         dbg += "  Window size: " + parent.width + "x" + parent.height + " - " + web.width + "x" + web.height + "\n";
         dbg += "  DevicePixel ratio: " + Screen.devicePixelRatio + "\n";
 
@@ -413,7 +382,7 @@ Window
       font.pixelSize: Math.round(height / 65)
       wrapMode: Text.WrapAnywhere
 
-      text: mainWindow.videoInfo
+      text: mainView.videoInfo
     }
   }
 

@@ -241,6 +241,22 @@ bool DisplayComponent::switchToHdrForMedia(bool hdrMedia)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+qreal DisplayComponent::sdrWhiteLevel()
+{
+  // No initializeDisplayManager() here: it emits refreshRateChanged, which makes the
+  // player reconfigure video and ask again.
+  int display = m_displayManager ? getApplicationDisplay(true) : -1;
+  return display >= 0 ? m_displayManager->sdrWhiteLevel(display) : 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+qreal DisplayComponent::peakLuminance()
+{
+  int display = m_displayManager ? getApplicationDisplay(true) : -1;
+  return display >= 0 ? m_displayManager->peakLuminance(display) : 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 bool DisplayComponent::restorePreviousVideoMode()
 {
   initializeDisplayManager();

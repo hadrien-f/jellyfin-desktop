@@ -29,6 +29,8 @@ public:
   bool isHdrCapable(int display) override;
   bool isHdrEnabled(int display) override;
   bool setHdrEnabled(int display, bool enable) override;
+  qreal sdrWhiteLevel(int display) override;
+  qreal peakLuminance(int display) override;
 
   // Called from the wl_registry listener.
   void bindGlobal(uint32_t name, const char* interface, uint32_t version);

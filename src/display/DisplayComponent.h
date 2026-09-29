@@ -37,6 +37,11 @@ public:
   // output was actually switched.
   bool switchToHdrForMedia(bool hdrMedia);
 
+  // SDR white and peak luminance of the application's display, in cd/m², or 0 when
+  // the platform doesn't tell.
+  qreal sdrWhiteLevel();
+  qreal peakLuminance();
+
   // The syntax is as follows: the command string consists of multiple arguments separated
   // by spaces. Each argument can be one of the following:
   //    <N>hz (e.g.: "24hz"): change the refresh rate

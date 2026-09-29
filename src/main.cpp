@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QIcon>
 #include <QtQml>
+#include <QQuickItem>
 #include <optional>
 #include <Qt>
 #include <QtWebEngineQuick>
@@ -19,6 +20,7 @@
 #include "core/ProfileManager.h"
 #include "player/PlayerComponent.h"
 #include "player/OpenGLDetect.h"
+#include "player/VideoWindow.h"
 #include "display/DisplayComponent.h"
 #include "Version.h"
 #include "settings/SettingsComponent.h"
@@ -128,6 +130,52 @@ void ShowLicenseInfo()
 QStringList g_qtFlags = {
   "--enable-gpu-rasterization",
   "--disable-features=MediaSessionService"
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Application event filter that catches popup window creation early.
+class PopupFixer : public QObject {
+  QWindow* m_mainWindow;
+public:
+  PopupFixer(QWindow* mainWin) : m_mainWindow(mainWin) {}
+  bool eventFilter(QObject* obj, QEvent* event) override {
+    auto* win = qobject_cast<QWindow*>(obj);
+    if (!win || win == m_mainWindow) {
+      return QObject::eventFilter(obj, event);
+    }
+
+    // Fix WebEngineView popup flags to accept focus
+    if (event->type() == QEvent::Show) {
+      Qt::WindowFlags flags = win->flags();
+
+      // Only fix WebEngineView dropdowns (Tool + FramelessWindowHint + WindowStaysOnTopHint)
+      // Don't touch other windows (e.g., MPV-related)
+      bool isWebEnginePopup = (flags & Qt::Tool) &&
+                               (flags & Qt::FramelessWindowHint) &&
+                               (flags & Qt::WindowStaysOnTopHint);
+
+      if (!isWebEnginePopup) {
+        return QObject::eventFilter(obj, event);
+      }
+
+      if (win->transientParent() == nullptr) {
+        win->setTransientParent(m_mainWindow);
+      }
+
+      if (win->modality() != Qt::NonModal) {
+        win->setModality(Qt::NonModal);
+      }
+
+      // WebEngineView creates popups with Qt::Tool | WindowDoesNotAcceptFocus
+      // which prevents interaction. Change to Qt::Popup to accept focus.
+      flags &= ~Qt::Tool;
+      flags |= Qt::Popup;
+      flags &= ~Qt::WindowDoesNotAcceptFocus;
+      win->setFlags(flags);
+    }
+
+    return QObject::eventFilter(obj, event);
+  }
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -501,87 +549,54 @@ int main(int argc, char *argv[])
 
     Globals::SetContextProperty("components", &ComponentManager::Get().getQmlPropertyMap());
 
-    // the only way to detect if QML parsing fails is to hook to this signal and then see
-    // if we get a valid object passed to it. Any error messages will be reported on stderr
-    // but since no normal user should ever see this it should be fine
-    //
-    QObject::connect(engine, &QQmlApplicationEngine::objectCreated, [&](QObject* object, const QUrl& url)
-    {
-      Q_UNUSED(url);
+    // mpv and the QML scene render into one window (see VideoWindow).
+    auto* videoWindow = new VideoWindow;
+    if (!videoWindow->initialize())
+      throw FatalException(QObject::tr("Failed to initialize OpenGL."));
 
-      if (object == nullptr)
-        throw FatalException(QObject::tr("Failed to parse application engine script."));
+    QQmlComponent component(engine, QUrl(QStringLiteral("qrc:/MainView.qml")));
+    auto* view = qobject_cast<QQuickItem*>(component.create());
+    if (!view)
+      throw FatalException(QObject::tr("Failed to parse application engine script.") + "\n" +
+                           component.errorString());
+    view->setProperty("hostWindow", QVariant::fromValue<QObject*>(videoWindow));
 
-      QQuickWindow* window = Globals::MainWindow();
+    videoWindow->setTitle("Jellyfin Desktop");
+    videoWindow->setMinimumSize(QSize(213, 120));
+    videoWindow->resize(1280, 720);
+    videoWindow->setSceneRoot(view);
+    PlayerComponent::Get().setVideoWindow(videoWindow);
 
-      // Set window flags for proper popup handling (e.g., WebEngineView dropdowns)
-      window->setFlags(window->flags() | Qt::WindowFullscreenButtonHint);
 
-      // Install event filter for proper event handling
-      window->installEventFilter(new EventFilter(window));
+    // Set window flags for proper popup handling (e.g., WebEngineView dropdowns)
+    videoWindow->setFlags(videoWindow->flags() | Qt::WindowFullscreenButtonHint);
 
-      // Install application event filter to catch popup window creation early
-      class PopupFixer : public QObject {
-        QQuickWindow* m_mainWindow;
-      public:
-        PopupFixer(QQuickWindow* mainWin) : m_mainWindow(mainWin) {}
-        bool eventFilter(QObject* obj, QEvent* event) override {
-          auto* win = qobject_cast<QWindow*>(obj);
-          if (!win || win == m_mainWindow) {
-            return QObject::eventFilter(obj, event);
-          }
+    // Install event filter for proper event handling
+    videoWindow->installEventFilter(new EventFilter(view));
 
-          // Fix WebEngineView popup flags to accept focus
-          if (event->type() == QEvent::Show) {
-            Qt::WindowFlags flags = win->flags();
+    // Install application event filter to catch popup window creation early
+    app.installEventFilter(new PopupFixer(videoWindow));
 
-            // Only fix WebEngineView dropdowns (Tool + FramelessWindowHint + WindowStaysOnTopHint)
-            // Don't touch other windows (e.g., MPV-related)
-            bool isWebEnginePopup = (flags & Qt::Tool) &&
-                                     (flags & Qt::FramelessWindowHint) &&
-                                     (flags & Qt::WindowStaysOnTopHint);
+    QObject* webChannel = qvariant_cast<QObject*>(view->property("webChannel"));
+    Q_ASSERT(webChannel);
+    ComponentManager::Get().setWebChannel(qobject_cast<QWebChannel*>(webChannel));
 
-            if (!isWebEnginePopup) {
-              return QObject::eventFilter(obj, event);
-            }
+    // Initialize WindowManager with window reference
+    WindowManager::Get().initializeWindow(videoWindow, videoWindow->sceneWindow(), view);
 
-            if (win->transientParent() == nullptr) {
-              win->setTransientParent(m_mainWindow);
-            }
-
-            if (win->modality() != Qt::NonModal) {
-              win->setModality(Qt::NonModal);
-            }
-
-            // WebEngineView creates popups with Qt::Tool | WindowDoesNotAcceptFocus
-            // which prevents interaction. Change to Qt::Popup to accept focus.
-            flags &= ~Qt::Tool;
-            flags |= Qt::Popup;
-            flags &= ~Qt::WindowDoesNotAcceptFocus;
-            win->setFlags(flags);
-          }
-
-          return QObject::eventFilter(obj, event);
-        }
-      };
-      app.installEventFilter(new PopupFixer(window));
-
-      QObject* webChannel = qvariant_cast<QObject*>(window->property("webChannel"));
-      Q_ASSERT(webChannel);
-      ComponentManager::Get().setWebChannel(qobject_cast<QWebChannel*>(webChannel));
-
-      // Initialize WindowManager with window reference
-      WindowManager::Get().initializeWindow(window);
-
-      // Handle other app focus by raising window
-      QObject::connect(uniqueApp, &UniqueApplication::otherApplicationStarted, []() {
-        WindowManager::Get().raiseWindow();
-      });
+    // Handle other app focus by raising window
+    QObject::connect(uniqueApp, &UniqueApplication::otherApplicationStarted, []() {
+      WindowManager::Get().raiseWindow();
     });
-    engine->load(QUrl(QStringLiteral("qrc:/webview.qml")));
+
+    videoWindow->show();
 
     // run our application
     int ret = app.exec();
+
+    // Before the engine: the window owns the QML scene and mpv.
+    PlayerComponent::Get().setVideoWindow(nullptr);
+    delete videoWindow;
 
     delete uniqueApp;
     Globals::EngineDestroy();

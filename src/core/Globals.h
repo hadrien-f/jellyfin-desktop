@@ -12,7 +12,6 @@ namespace Globals
   void SetContextProperty(const QString& property, QObject* object);
   void SetContextProperty(const QString& property, const QVariant& value);
   void EngineDestroy();
-  QQuickWindow* MainWindow();
 };
 
 #endif // KONVERGOENGINE_H

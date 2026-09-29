@@ -48,16 +48,3 @@ void Globals::EngineDestroy()
   g_qmlEngine = nullptr;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-QQuickWindow* Globals::MainWindow()
-{
-  Q_ASSERT_X(g_qmlEngine, "Globals", "QmlEngine not inited yet");
-
-  auto rootObject = g_qmlEngine->rootObjects().first();
-  Q_ASSERT_X(g_qmlEngine, "Globals", "No root objects in QmlEngine");
-
-  auto window = qobject_cast<QQuickWindow*>(rootObject);
-  Q_ASSERT_X(g_qmlEngine, "Globals", "RootObject in QmlEngine is not a QQuickWindow");
-
-  return window;
-}

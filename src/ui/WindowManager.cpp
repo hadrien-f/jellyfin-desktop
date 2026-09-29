@@ -31,6 +31,8 @@ WindowManager& WindowManager::Get()
 WindowManager::WindowManager(QObject* parent)
   : ComponentBase(parent),
     m_window(nullptr),
+    m_scene(nullptr),
+    m_view(nullptr),
     m_webView(nullptr),
     m_enforcingZoom(false),
     m_ignoreFullscreenSettingsChange(0),
@@ -55,9 +57,11 @@ void WindowManager::componentPostInitialize()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void WindowManager::initializeWindow(QQuickWindow* window)
+void WindowManager::initializeWindow(QWindow* window, QQuickWindow* scene, QObject* view)
 {
   m_window = window;
+  m_scene = scene;
+  m_view = view;
 
   if (!m_window)
   {
@@ -66,9 +70,9 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   }
 
   // Initialize components that need window reference
-  PlayerComponent::Get().setWindow(m_window);
+  PlayerComponent::Get().setWindow(m_scene);
   DisplayComponent::Get().setApplicationWindow(m_window);
-  TaskbarComponent::Get().setWindow(m_window);
+  TaskbarComponent::Get().setWindow(m_scene);
 
   // Install event filter to track cursor enter/leave
   m_window->installEventFilter(this);
@@ -99,7 +103,7 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   });
 
   // Connect to window visibility changes (for fullscreen tracking)
-  connect(m_window, &QQuickWindow::visibilityChanged,
+  connect(m_window, &QWindow::visibilityChanged,
           this, &WindowManager::onVisibilityChanged);
 
   // Separate handlers for size and position
@@ -127,14 +131,14 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   connect(m_window, &QWindow::windowStateChanged, this, scheduleSizeSave);
 
   // Size tracking
-  connect(m_window, &QQuickWindow::widthChanged, this, scheduleSizeSave);
-  connect(m_window, &QQuickWindow::heightChanged, this, scheduleSizeSave);
+  connect(m_window, &QWindow::widthChanged, this, scheduleSizeSave);
+  connect(m_window, &QWindow::heightChanged, this, scheduleSizeSave);
 
   // Position tracking only on non-Wayland (Wayland compositor controls positioning)
   if (!isWayland())
   {
-    connect(m_window, &QQuickWindow::xChanged, this, schedulePositionSave);
-    connect(m_window, &QQuickWindow::yChanged, this, schedulePositionSave);
+    connect(m_window, &QWindow::xChanged, this, schedulePositionSave);
+    connect(m_window, &QWindow::yChanged, this, schedulePositionSave);
   }
 
   // Connect to application shutdown
@@ -142,7 +146,7 @@ void WindowManager::initializeWindow(QQuickWindow* window)
           this, &WindowManager::saveGeometrySlot);
 
   // Find web view and connect to zoom changes
-  m_webView = m_window->findChild<QQuickItem*>("web");
+  m_webView = m_view->findChild<QQuickItem*>("web");
   if (m_webView)
   {
     connect(m_webView, SIGNAL(zoomFactorChanged()), this, SLOT(onZoomFactorChanged()));
@@ -155,9 +159,9 @@ void WindowManager::initializeWindow(QQuickWindow* window)
   m_systemDebugInfo = SystemComponent::Get().debugInformation();
 
   connect(m_infoTimer, &QTimer::timeout, this, &WindowManager::updateDebugInfo);
-  connect(m_window, &QQuickWindow::beforeSynchronizing, this, &WindowManager::updateOpenGLInfo, static_cast<Qt::ConnectionType>(Qt::DirectConnection|Qt::SingleShotConnection));
+  connect(m_scene, &QQuickWindow::beforeSynchronizing, this, &WindowManager::updateOpenGLInfo, static_cast<Qt::ConnectionType>(Qt::DirectConnection|Qt::SingleShotConnection));
 
-  QQmlProperty(m_window, "showDebugLayer").connectNotifySignal(this, SLOT(onShowDebugLayerChanged()));
+  QQmlProperty(m_view, "showDebugLayer").connectNotifySignal(this, SLOT(onShowDebugLayerChanged()));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -441,7 +445,7 @@ void WindowManager::updateMainSectionSettings(const QVariantMap& values)
   {
     QString mode = values["webMode"].toString();
     bool desktopMode = (mode == "desktop");
-    m_window->setProperty("webDesktopMode", desktopMode);
+    m_view->setProperty("webDesktopMode", desktopMode);
   }
 
   // Forced screen
@@ -464,7 +468,7 @@ void WindowManager::updateMainSectionSettings(const QVariantMap& values)
   {
     QString url = values["startupurl"].toString();
     if (!url.isEmpty())
-      m_window->setProperty("webUrl", url);
+      m_view->setProperty("webUrl", url);
   }
 
   // Browser zoom
@@ -916,13 +920,13 @@ void WindowManager::updateDebugInfo()
   info << "\n";
   debugInfo += infoString;
 
-  m_window->setProperty("debugInfo", debugInfo);
-  m_window->setProperty("videoInfo", PlayerComponent::Get().videoInformation());
+  m_view->setProperty("debugInfo", debugInfo);
+  m_view->setProperty("videoInfo", PlayerComponent::Get().videoInformation());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowManager::onShowDebugLayerChanged() {
-  if(m_window->property("showDebugLayer").toBool()) {
+  if(m_view->property("showDebugLayer").toBool()) {
     m_infoTimer->start();
     updateDebugInfo();
   } else {
