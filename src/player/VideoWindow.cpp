@@ -11,6 +11,7 @@
 #include <QQuickItem>
 #include <QQuickRenderTarget>
 #include <QThread>
+#include <private/qwindow_p.h>
 
 #include <MpvController>
 
@@ -150,6 +151,14 @@ bool VideoWindow::initialize()
   const QColorSpace requested = requestedFormat().colorSpace();
   m_hdr = requested.transferFunction() == QColorSpace::TransferFunction::St2084 &&
           format().colorSpace() == requested;
+  if (!m_hdr && requested.transferFunction() == QColorSpace::TransferFunction::St2084)
+  {
+    // The 10-bit request was for PQ only. Its EGL configs have no usable alpha, which the
+    // shadows of Qt's own decorations need (GNOME): they would be drawn opaque black.
+    destroy();
+    setFormat(QSurfaceFormat::defaultFormat());
+    create();
+  }
 
   m_context.setFormat(requestedFormat());
   // QtWebEngine shares its textures through the global share context.
@@ -350,6 +359,7 @@ void VideoWindow::render()
   const QSize size = (QSizeF(this->size()) * devicePixelRatio()).toSize();
   if (size.isEmpty())
     return;
+  syncSceneDevicePixelRatio();
   if (m_sceneDirty || size != m_textureSize)
     renderScene(size);
 
@@ -385,7 +395,10 @@ void VideoWindow::render()
     f->glClear(GL_COLOR_BUFFER_BIT);
   }
 
-  // mpv leaves its own state behind: set everything this pass relies on.
+  // mpv leaves its own state behind: set everything this pass relies on. That includes the
+  // framebuffer: mpv leaves 0 bound, while Qt's is its own FBO when Qt draws the window
+  // decorations (GNOME), and anything drawn into 0 is overwritten by Qt's copy.
+  f->glBindFramebuffer(GL_FRAMEBUFFER, m_context.defaultFramebufferObject());
   f->glViewport(0, 0, size.width(), size.height());
   f->glDisable(GL_DEPTH_TEST);
   f->glDisable(GL_SCISSOR_TEST);
@@ -404,6 +417,23 @@ void VideoWindow::render()
   m_context.swapBuffers(this);
   if (m_mpvRender)
     mpv_render_context_report_swap(m_mpvRender);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// QtWebEngine takes its scale from QWindow::devicePixelRatio() of the scene window, not from
+// QQuickWindow::effectiveDevicePixelRatio() as Qt documents for QQuickRenderControl
+// (QTBUG-151048). The scene window is never shown, so Qt gives it the screen's integer scale:
+// at a fractional scale (GNOME at 175 %) the page renders at 2x and is downscaled, blurring
+// text. Give it this window's ratio instead, through private API, until that bug is fixed.
+// Qt resets the value when the scene window's screen changes; render() calls this every frame.
+void VideoWindow::syncSceneDevicePixelRatio()
+{
+  QWindowPrivate* scene = QWindowPrivate::get(&m_scene);
+  if (scene->devicePixelRatio == devicePixelRatio())
+    return;
+  scene->devicePixelRatio = devicePixelRatio();
+  QEvent event(QEvent::DevicePixelRatioChange);
+  QCoreApplication::sendEvent(&m_scene, &event);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

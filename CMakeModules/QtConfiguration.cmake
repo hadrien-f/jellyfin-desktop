@@ -65,9 +65,12 @@ foreach(COMP ${components})
 		include_directories(${${mod}_PRIVATE_INCLUDE_DIRS})
 	endif(OPENELEC)
 
-	# Need private interfaces for qpa/qplatformnativeinterface.h:
+	# Need private interfaces for qpa/qplatformnativeinterface.h, and QWindowPrivate
+	# for VideoWindow (QTBUG-151048). Since Qt 6.9 they are a component of their own.
 	if(${mod} STREQUAL Qt6Gui)
 		include_directories(${Qt6Gui_PRIVATE_INCLUDE_DIRS})
+		find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+		list(APPEND QT6_LIBRARIES Qt6::GuiPrivate)
 	endif()
 
 	list(APPEND QT6_LIBRARIES ${${mod}_LIBRARIES})

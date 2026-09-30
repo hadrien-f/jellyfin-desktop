@@ -90,6 +90,7 @@ private:
   void stopVideo();
   void render();
   void renderScene(const QSize& size);
+  void syncSceneDevicePixelRatio();
   void convertScene(const QSize& size);
   void scheduleSceneUpdate();
   static void onMpvUpdate(void* context);
