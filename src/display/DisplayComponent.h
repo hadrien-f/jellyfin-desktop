@@ -59,6 +59,8 @@ private:
   explicit DisplayComponent(QObject *parent = nullptr);
   QString displayName(int display);
   QString modePretty(int display, int mode);
+  void saveRestoreState(int display, bool hdrSwitched);
+  void restoreAfterCrash();
 
   DisplayManager  *m_displayManager;
   int m_lastVideoMode;

@@ -96,6 +96,10 @@ bool DisplayComponent::componentInitialize()
       connect(screen, SIGNAL(geometryChanged(QRect)), this, SLOT(monitorChange()));
     }
 
+    // Quitting during playback would leave the display in the video's mode.
+    connect(app, &QGuiApplication::aboutToQuit, this, &DisplayComponent::restorePreviousVideoMode);
+    restoreAfterCrash();
+
 #ifdef TARGET_RPI
     // The firmware doesn't always make the best decision. Hope we do better.
     qInfo() << "Trying to switch to best display mode.";
@@ -160,6 +164,7 @@ bool DisplayComponent::switchToBestVideoMode(float frameRate)
         qInfo() << "Mode switching failed.";
         return false;
       }
+      saveRestoreState(currentDisplay, false);
       return true;
     }
     qInfo() << "No better video mode than the currently active one found.";
@@ -237,7 +242,10 @@ bool DisplayComponent::switchToHdrForMedia(bool hdrMedia)
     qInfo() << "Not switching HDR - current display not found.";
     return false;
   }
-  return m_displayManager->switchHdrForMedia(currentDisplay, hdrMedia);
+  if (!m_displayManager->switchHdrForMedia(currentDisplay, hdrMedia))
+    return false;
+  saveRestoreState(currentDisplay, true);
+  return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -266,6 +274,7 @@ bool DisplayComponent::restorePreviousVideoMode()
 
   // Independent of the mode: HDR may have been switched without a mode change.
   m_displayManager->restoreHdr();
+  SettingsComponent::Get().setValue(SETTINGS_SECTION_STATE, "displayRestore", QVariant());
 
   if (!m_displayManager->isValidDisplayMode(m_lastDisplay, m_lastVideoMode))
     return false;
@@ -286,6 +295,59 @@ bool DisplayComponent::restorePreviousVideoMode()
   m_lastDisplay = -1;
 
   return ret;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// What restorePreviousVideoMode() would undo, saved in storage.json so the next start can undo
+// it if this session ends without restoring (crash, kill).
+void DisplayComponent::saveRestoreState(int display, bool hdrSwitched)
+{
+  QVariantMap state = SettingsComponent::Get().value(SETTINGS_SECTION_STATE, "displayRestore").toMap();
+  state["display"] = m_displayManager->m_displays[display]->m_name;
+  if (hdrSwitched)
+    state["hdrOff"] = true;
+  if (m_lastDisplay == display && m_displayManager->isValidDisplayMode(display, m_lastVideoMode))
+  {
+    const DMVideoModePtr mode = m_displayManager->m_displays[display]->m_videoModes[m_lastVideoMode];
+    state["width"] = mode->m_width;
+    state["height"] = mode->m_height;
+    state["refreshRate"] = mode->m_refreshRate;
+  }
+  SettingsComponent::Get().setValue(SETTINGS_SECTION_STATE, "displayRestore", state);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// ponytail: restores even if the user changed the mode by hand since the crash; store the mode
+// switched to and compare if that turns out to annoy anyone.
+void DisplayComponent::restoreAfterCrash()
+{
+  QVariantMap state = SettingsComponent::Get().value(SETTINGS_SECTION_STATE, "displayRestore").toMap();
+  if (state.isEmpty() || !m_displayManager)
+    return;
+
+  qInfo() << "The last session didn't restore the display, restoring" << state;
+  for (auto it = m_displayManager->m_displays.begin(); it != m_displayManager->m_displays.end(); ++it)
+  {
+    if (it.value()->m_name != state["display"].toString())
+      continue;
+
+    if (state["hdrOff"].toBool() && m_displayManager->isHdrEnabled(it.key()))
+      m_displayManager->setHdrEnabled(it.key(), false);
+
+    for (auto m = it.value()->m_videoModes.begin(); m != it.value()->m_videoModes.end(); ++m)
+    {
+      const DMVideoModePtr& mode = m.value();
+      if (state.contains("width") && mode->m_width == state["width"].toInt() &&
+          mode->m_height == state["height"].toInt() &&
+          qFuzzyCompare(mode->m_refreshRate, state["refreshRate"].toFloat()))
+      {
+        if (m.key() != m_displayManager->getCurrentDisplayMode(it.key()))
+          m_displayManager->setDisplayMode(it.key(), m.key());
+        break;
+      }
+    }
+  }
+  SettingsComponent::Get().setValue(SETTINGS_SECTION_STATE, "displayRestore", QVariant());
 }
 
 
