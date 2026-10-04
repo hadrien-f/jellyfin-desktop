@@ -56,6 +56,16 @@ PlayerComponent::PlayerComponent(QObject* parent)
   m_restoreDisplayTimer.setSingleShot(true);
   connect(&m_restoreDisplayTimer, &QTimer::timeout, this, &PlayerComponent::onRestoreDisplay);
 
+  // A few seconds, so a quick Alt+Tab doesn't switch the mode twice.
+  m_pausedRestoreTimer.setSingleShot(true);
+  m_pausedRestoreTimer.setInterval(5000);
+  connect(&m_pausedRestoreTimer, &QTimer::timeout, this, [this]
+  {
+    qInfo() << "Paused in the background: restoring the display mode";
+    DisplayComponent::Get().restorePreviousVideoMode();
+    m_displayRestoredWhilePaused = true;
+  });
+
   connect(&DisplayComponent::Get(), &DisplayComponent::refreshRateChanged, this, &PlayerComponent::onRefreshRateChange);
 
   m_reloadAudioTimer.setSingleShot(true);
@@ -251,6 +261,8 @@ void PlayerComponent::setWindow(QQuickWindow* window)
 
   m_mpv = m_videoWindow->mpvController();
   initializeMpv();
+
+  connect(m_videoWindow, &QWindow::activeChanged, this, &PlayerComponent::updatePausedInBackground);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -403,6 +415,17 @@ void PlayerComponent::onRestoreDisplay()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+void PlayerComponent::updatePausedInBackground()
+{
+  // isActive() is also false when the window is hidden or minimized.
+  bool background = m_videoWindow && !m_videoWindow->isActive();
+  if (!(m_inPlayback && m_paused && background))
+    m_pausedRestoreTimer.stop();
+  else if (!m_displayRestoredWhilePaused && !m_pausedRestoreTimer.isActive())
+    m_pausedRestoreTimer.start();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::onRefreshRateChange()
 {
   // Make sure settings dependent on the display refresh rate are updated properly.
@@ -503,6 +526,8 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       auto *endFile = static_cast<mpv_event_end_file*>(event->data);
 
       m_inPlayback = false;
+      m_pausedRestoreTimer.stop();
+      m_displayRestoredWhilePaused = false;
       m_playbackCanceled = false;
       m_playbackError = "";
 
@@ -535,6 +560,22 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       if (strcmp(prop->name, "pause") == 0 && prop->format == MPV_FORMAT_FLAG)
       {
         m_paused = !!*static_cast<int*>(prop->data);
+        updatePausedInBackground();
+        if (!m_paused && m_displayRestoredWhilePaused)
+        {
+          m_displayRestoredWhilePaused = false;
+          bool switched = switchDisplayFrameRate();
+          switched = switchDisplayHdr() || switched;
+          if (switched)
+          {
+            // Same wait as before loading: the screen is black during the switch.
+            // ponytail: a pause/unpause during the wait is overridden by the resume below.
+            int pause = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "refreshrate.delay").toInt() * 1000;
+            qInfo() << "waiting" << pause << "msec after rate switch before resuming";
+            m_mpv->command(QStringList() << "set" << "pause" << "yes");
+            QTimer::singleShot(pause, this, [this] { m_mpv->command(QStringList() << "set" << "pause" << "no"); });
+          }
+        }
       }
       else if (strcmp(prop->name, "core-idle") == 0 && prop->format == MPV_FORMAT_FLAG)
       {
