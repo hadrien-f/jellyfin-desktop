@@ -13,6 +13,28 @@ const remap = {
     "enter": "select",
 }
 
+// jellyfin-web moves sliders (seek bar, volume) and opens the OSD on the seek
+// bar only on ArrowLeft/Right keydown; the left/right commands just jump or
+// move focus. So send these as keys, except in a text field where the
+// synthetic key can't move the caret and the command still moves focus.
+const arrowKeys = {
+    "left": ["ArrowLeft", 37],
+    "right": ["ArrowRight", 39],
+}
+
+function sendArrowKey(action) {
+    const target = document.activeElement || document.body;
+    if (target.tagName === 'TEXTAREA' || (target.tagName === 'INPUT' && target.type !== 'range')) {
+        return false;
+    }
+
+    const [code, keyCode] = arrowKeys[action];
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+        key: code, code, keyCode, which: keyCode, bubbles: true, cancelable: true
+    }));
+    return true;
+}
+
 class inputPlugin {
     constructor({ inputManager, playbackManager }) {
         this.name = 'Input Plugin';
@@ -46,6 +68,8 @@ class inputPlugin {
                         } else if (currentPlayer) {
                             playbackManager.previousTrack(currentPlayer);
                         }
+                    } else if (arrowKeys.hasOwnProperty(action) && sendArrowKey(action)) {
+                        // handled as a key
                     } else {
                         if (remap.hasOwnProperty(action)) {
                             action = remap[action];
