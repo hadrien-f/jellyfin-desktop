@@ -63,6 +63,7 @@ PlayerComponent::PlayerComponent(QObject* parent)
   {
     qInfo() << "Paused in the background: restoring the display mode";
     DisplayComponent::Get().restorePreviousVideoMode();
+    updateHdrTarget();
     m_displayRestoredWhilePaused = true;
   });
 
@@ -414,7 +415,10 @@ void PlayerComponent::onRestoreDisplay()
 {
   // If the player will in fact start another file (or is playing one), don't restore.
   if (m_mpv->getProperty( "idle-active").toBool())
+  {
     DisplayComponent::Get().restorePreviousVideoMode();
+    updateHdrTarget();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1493,11 +1497,15 @@ void PlayerComponent::updateHdrTarget()
   // sdrWhite / 203, then clips each channel at the output's peak (no tone mapping).
   //  - HDR output: aim mpv at peak * 203 / sdrWhite, which KWin scales back to the peak.
   //  - SDR output: KWin clips at SDR white, so mpv must fit the video under 203.
+  // Only when the platform reports luminances (KDE): elsewhere the output's HDR state
+  // isn't known either, so mpv keeps "auto".
   const qreal refWhite = 203;
   qreal peak = DisplayComponent::Get().peakLuminance();
   qreal sdrWhite = DisplayComponent::Get().sdrWhiteLevel();
   const bool hdrOutput = DisplayComponent::Get().isHdrEnabled();
-  qreal target = !hdrOutput ? refWhite : (peak > 0 && sdrWhite > 0 ? peak * refWhite / sdrWhite : peak);
+  qreal target = 0;
+  if (peak > 0)
+    target = !hdrOutput ? refWhite : (sdrWhite > 0 ? peak * refWhite / sdrWhite : peak);
   m_mpv->setProperty("target-peak", target > 0 ? QString::number(qRound(target)) : QString("auto"));
 
   if (sdrWhite > 0)

@@ -294,6 +294,8 @@ bool DisplayManagerKDE::isHdrEnabled(int display)
 {
   if (!isValidDisplay(display))
     return false;
+  // Pick up changes made in Plasma's settings since the last dispatch.
+  wl_display_roundtrip_queue(m_display, m_queue);
   return m_registry->m_devices[m_displays[display]->m_privId]->m_hdr;
 }
 
