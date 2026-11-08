@@ -265,6 +265,13 @@ qreal DisplayComponent::peakLuminance()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+bool DisplayComponent::isHdrEnabled()
+{
+  int display = m_displayManager ? getApplicationDisplay(true) : -1;
+  return display >= 0 && m_displayManager->isHdrEnabled(display);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 bool DisplayComponent::restorePreviousVideoMode()
 {
   initializeDisplayManager();

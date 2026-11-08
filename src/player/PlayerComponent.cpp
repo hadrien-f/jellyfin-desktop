@@ -403,7 +403,10 @@ bool PlayerComponent::switchDisplayHdr()
 
   // As for the refresh rate: don't let a pending restore undo the switch.
   m_restoreDisplayTimer.stop();
-  return DisplayComponent::Get().switchToHdrForMedia(m_mediaHdr);
+  bool switched = DisplayComponent::Get().switchToHdrForMedia(m_mediaHdr);
+  if (switched)
+    updateHdrTarget(); // mpv's target depends on whether the output is HDR
+  return switched;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1483,14 +1486,24 @@ void PlayerComponent::updateHdrTarget()
     return;
 
   // What the display can show, so mpv tone-maps brighter content itself; Plasma's
-  // display settings are where the user calibrates it. Read at each file start.
+  // display settings are where the user calibrates it. Read at each file start and
+  // after each HDR switch.
+  // Qt sends no luminance with the surface's PQ description, so KWin (6.7) takes the
+  // video's 203 cd/m² reference white to the output's SDR white, scaling everything by
+  // sdrWhite / 203, then clips each channel at the output's peak (no tone mapping).
+  //  - HDR output: aim mpv at peak * 203 / sdrWhite, which KWin scales back to the peak.
+  //  - SDR output: KWin clips at SDR white, so mpv must fit the video under 203.
+  const qreal refWhite = 203;
   qreal peak = DisplayComponent::Get().peakLuminance();
-  m_mpv->setProperty("target-peak", peak > 0 ? QString::number(peak) : QString("auto"));
-
   qreal sdrWhite = DisplayComponent::Get().sdrWhiteLevel();
+  const bool hdrOutput = DisplayComponent::Get().isHdrEnabled();
+  qreal target = !hdrOutput ? refWhite : (peak > 0 && sdrWhite > 0 ? peak * refWhite / sdrWhite : peak);
+  m_mpv->setProperty("target-peak", target > 0 ? QString::number(qRound(target)) : QString("auto"));
+
   if (sdrWhite > 0)
-    m_videoWindow->setSdrWhiteLevel(sdrWhite);
-  qInfo() << "HDR target: peak" << peak << "SDR white" << sdrWhite << "(0: unknown)";
+    m_videoWindow->setSdrWhiteLevel(hdrOutput ? sdrWhite : refWhite);
+  qInfo() << "HDR target: output" << (hdrOutput ? "HDR" : "SDR") << "peak" << peak << "SDR white" << sdrWhite
+          << "-> mpv target-peak" << target << "(0: unknown)";
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

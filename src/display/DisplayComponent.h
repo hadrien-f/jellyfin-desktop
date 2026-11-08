@@ -41,6 +41,8 @@ public:
   // the platform doesn't tell.
   qreal sdrWhiteLevel();
   qreal peakLuminance();
+  // Whether the application's display currently outputs HDR.
+  bool isHdrEnabled();
 
   // The syntax is as follows: the command string consists of multiple arguments separated
   // by spaces. Each argument can be one of the following:
