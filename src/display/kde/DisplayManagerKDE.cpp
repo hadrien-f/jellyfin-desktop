@@ -53,6 +53,7 @@ public:
   uint32_t m_sdrBrightness = 0;       // cd/m², since version 3
   uint32_t m_maxPeakBrightness = 0;   // cd/m², from the EDID, since version 6
   int32_t m_peakBrightnessOverride = -1; // cd/m², set by the user in Plasma, -1 if none
+  QByteArray m_edid;
   std::vector<std::unique_ptr<KdeOutputMode>> m_modes;
   KdeOutputMode* m_currentMode = nullptr;
 
@@ -81,6 +82,7 @@ protected:
     m_peakBrightnessOverride = maxPeak;
   }
   void kde_output_device_v2_name(const QString& name) override { m_name = name; }
+  void kde_output_device_v2_edid(const QString& raw) override { m_edid = QByteArray::fromBase64(raw.toLatin1()); }
   void kde_output_device_v2_removed() override { m_removed = true; }
 };
 
@@ -334,9 +336,14 @@ qreal DisplayManagerKDE::peakLuminance(int display)
     return 0;
   wl_display_roundtrip_queue(m_display, m_queue);
   const auto& device = m_registry->m_devices[m_displays[display]->m_privId];
-  // The user's override in Plasma's display settings wins over the EDID value.
-  return device->m_peakBrightnessOverride > 0 ? device->m_peakBrightnessOverride
-                                              : device->m_maxPeakBrightness;
+  // The user's override in Plasma's display settings wins over the EDID: first the HDR
+  // static metadata (KWin's brightness_metadata), else the Dolby Vision block. KWin then
+  // assumes 800 cd/m² itself (DrmOutput::createColorDescription) and clips there.
+  if (device->m_peakBrightnessOverride > 0)
+    return device->m_peakBrightnessOverride;
+  if (device->m_maxPeakBrightness > 0)
+    return device->m_maxPeakBrightness;
+  return std::min(dolbyVisionPeakLuminance(device->m_edid), 800.0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

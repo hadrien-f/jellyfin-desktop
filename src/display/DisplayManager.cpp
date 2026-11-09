@@ -7,6 +7,8 @@
 //
 
 #include <QDebug>
+#include <algorithm>
+#include <cmath>
 #include <QWindow>
 #include "DisplayManager.h"
 #include "math.h"
@@ -73,6 +75,51 @@ bool DisplayManager::isValidDisplayMode(int display, int mode)
       return true;
 
   return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+qreal DisplayManager::dolbyVisionPeakLuminance(const QByteArray& edid)
+{
+  // Layout as decoded by edid-decode (cta_dolby_video in parse-cta-block.cpp).
+  auto pqToNits = [](double pq) {
+    const double m1 = 2610.0 / 16384, m2 = 2523.0 / 4096 * 128;
+    const double c1 = 3424.0 / 4096, c2 = 2413.0 / 4096 * 32, c3 = 2392.0 / 4096 * 32;
+    double e = std::pow(pq, 1 / m2);
+    return 10000 * std::pow(std::max(e - c1, 0.0) / (c2 - c3 * e), 1 / m1);
+  };
+  const auto* d = reinterpret_cast<const unsigned char*>(edid.constData());
+  for (qsizetype b = 128; b + 128 <= edid.size(); b += 128)
+  {
+    if (d[b] != 0x02) // CTA-861 extension
+      continue;
+    const qsizetype end = b + d[b + 2];
+    for (qsizetype i = b + 4; i < end && i < b + 127; i += 1 + (d[i] & 31))
+    {
+      const int len = d[i] & 31;
+      // Extended tag 0x01 (vendor-specific video), OUI 00-D0-46 (Dolby), stored LSB first.
+      if (d[i] >> 5 != 7 || len < 5 || i + 1 + len > b + 127 || d[i + 1] != 0x01 ||
+          d[i + 2] != 0x46 || d[i + 3] != 0xd0 || d[i + 4] != 0x00)
+        continue;
+      const unsigned char* x = d + i + 5;
+      const int n = len - 4;
+      switch ((x[0] >> 5) & 7)
+      {
+        case 0:
+          if (n > 15)
+            return pqToNits(((x[15] << 4) | (x[13] & 0xf)) / 4095.0);
+          break;
+        case 1:
+          if (n > 1)
+            return 100 + (x[1] >> 1) * 50;
+          break;
+        case 2:
+          if (n > 2)
+            return pqToNits((2055 + 65 * (x[2] >> 3)) / 4095.0);
+          break;
+      }
+    }
+  }
+  return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

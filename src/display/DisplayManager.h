@@ -126,6 +126,10 @@ public:
   // Luminance of the display's SDR white and its peak, in cd/m², or 0 when unknown.
   virtual qreal sdrWhiteLevel(int display) { Q_UNUSED(display); return 0; }
   virtual qreal peakLuminance(int display) { Q_UNUSED(display); return 0; }
+  // Peak luminance a display gives Dolby Vision sources ("target max") in its EDID's
+  // Dolby Vision vendor-specific video data block (versions 0, 1, 2), in cd/m², or 0.
+  // For displays whose HDR static metadata block has no luminance, as some projectors.
+  static qreal dolbyVisionPeakLuminance(const QByteArray& edid);
 
   // other classes functions
   int findBestMatch(int display, DMMatchMediaInfo& matchInfo);

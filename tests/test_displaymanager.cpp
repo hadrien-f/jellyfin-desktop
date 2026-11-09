@@ -85,6 +85,7 @@ private slots:
   void testHdrLeftAloneForSdrMedia();
   void testHdrAlreadyOnIsNotTurnedOff();
   void testHdrNotSwitchedWhenIncapable();
+  void testDolbyVisionPeakLuminance();
 };
 
 // Helper function: Populates a DisplayManager with some typical display modes.
@@ -303,6 +304,45 @@ void TestDisplayManager::testHdrNotSwitchedWhenIncapable()
   QVERIFY(!mgr.switchHdrForMedia(0, true));
   QVERIFY(!mgr.switchHdrForMedia(7, true)); // no such display
   QCOMPARE(mgr.m_hdrSwitches, 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void TestDisplayManager::testDolbyVisionPeakLuminance()
+{
+  // XGIMI Titan Noir Max (movie mode): no luminance in its HDR static metadata block, a
+  // Dolby Vision v2 block with "Target Max PQ v2: 2705 (447 cd/m^2)" (edid-decode).
+  QByteArray edid(
+    "\x00\xff\xff\xff\xff\xff\xff\x00\x60\xed\x30\x00\x01\x00\x00\x00"
+    "\x01\x23\x01\x03\x80\x73\x41\x78\x0a\xcf\x74\xa3\x57\x4c\xb0\x23"
+    "\x09\x48\x4c\x00\x00\x00\x01\x01\x01\xff\x01\xff\xff\x01\x01\x01"
+    "\x01\x01\x01\x01\x01\x20\x08\xe8\x00\x30\xf2\x70\x5a\x80\xb0\x58"
+    "\x8a\x00\xc4\x8e\x21\x00\x00\x1e\x02\x3a\x80\x18\x71\x38\x2d\x40"
+    "\x58\x2c\x45\x00\xc4\x8e\x21\x00\x00\x1e\x00\x00\x00\xfc\x00\x58"
+    "\x47\x49\x4d\x49\x20\x54\x56\x0a\x20\x20\x20\x20\x00\x00\x00\xfd"
+    "\x00\x3b\x46\x1f\x8c\x3c\x00\x0a\x20\x20\x20\x20\x20\x20\x01\xc7"
+    "\x02\x03\x71\xf0\x57\x05\x84\x03\x01\x12\x13\x14\x90\x1f\x20\x22"
+    "\x5d\x5f\x60\x61\x62\x64\x65\x66\x5e\x63\x02\x21\x32\x09\x7f\x07"
+    "\x3d\x07\xc0\x5f\x7e\x07\x15\x07\x50\x57\x06\x00\x67\x7e\x00\x83"
+    "\x01\x00\x00\xe2\x00\xff\x72\x03\x0c\x00\x30\x00\xf8\x44\x20\xc0"
+    "\x84\x01\x02\x03\x04\x01\x41\x00\x00\x68\xd8\x5d\xc4\x01\x78\x80"
+    "\x6f\x02\xe3\x05\xff\x81\xe4\x0f\x00\x60\x06\xe3\x06\x07\x01\xe5"
+    "\x01\x8b\x84\x90\x01\xeb\x01\x46\xd0\x00\x4d\x63\x52\x3e\xa4\xcc"
+    "\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53",
+    256);
+  QCOMPARE(qRound(DisplayManager::dolbyVisionPeakLuminance(edid)), 447);
+
+  // Same block as version 1: target max = 100 + 50 * (byte 1 >> 1).
+  QByteArray v1 = edid;
+  const qsizetype dv = v1.indexOf(QByteArray("\x01\x46\xd0\x00", 4)) + 4;
+  v1[dv] = char(0x20);     // version 1
+  v1[dv + 1] = char(7 << 1); // 100 + 7 * 50
+  QCOMPARE(qRound(DisplayManager::dolbyVisionPeakLuminance(v1)), 450);
+
+  // No Dolby block (other OUI), and no EDID at all.
+  QByteArray none = edid;
+  none[dv - 1] = char(0x01);
+  QCOMPARE(DisplayManager::dolbyVisionPeakLuminance(none), 0.0);
+  QCOMPARE(DisplayManager::dolbyVisionPeakLuminance(QByteArray()), 0.0);
 }
 
 QTEST_APPLESS_MAIN(TestDisplayManager)
