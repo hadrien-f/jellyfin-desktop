@@ -310,7 +310,8 @@ void TestDisplayManager::testHdrNotSwitchedWhenIncapable()
 void TestDisplayManager::testDolbyVisionPeakLuminance()
 {
   // XGIMI Titan Noir Max (movie mode): no luminance in its HDR static metadata block, a
-  // Dolby Vision v2 block with "Target Max PQ v2: 2705 (447 cd/m^2)" (edid-decode).
+  // Dolby Vision v2 block with "Target Max PQ v2: 2705" = 431 cd/m^2 (PQ; an older
+  // edid-decode printed 447).
   QByteArray edid(
     "\x00\xff\xff\xff\xff\xff\xff\x00\x60\xed\x30\x00\x01\x00\x00\x00"
     "\x01\x23\x01\x03\x80\x73\x41\x78\x0a\xcf\x74\xa3\x57\x4c\xb0\x23"
@@ -329,7 +330,7 @@ void TestDisplayManager::testDolbyVisionPeakLuminance()
     "\x01\x8b\x84\x90\x01\xeb\x01\x46\xd0\x00\x4d\x63\x52\x3e\xa4\xcc"
     "\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53",
     256);
-  QCOMPARE(qRound(DisplayManager::dolbyVisionPeakLuminance(edid)), 447);
+  QCOMPARE(qRound(DisplayManager::dolbyVisionPeakLuminance(edid)), 431);
 
   // Same block as version 1: target max = 100 + 50 * (byte 1 >> 1).
   QByteArray v1 = edid;
