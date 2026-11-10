@@ -170,6 +170,7 @@ private Q_SLOTS:
   void handleMpvEvents();
   void onRestoreDisplay();
   void updatePausedInBackground();
+  void restorePassthrough();
   void onRefreshRateChange();
   void updateAudioDevice();
 
@@ -270,6 +271,7 @@ private:
   // Paused and the window not active: give the desktop its mode back.
   QTimer m_pausedRestoreTimer;
   bool m_displayRestoredWhilePaused = false;
+  bool m_audioReleasedWhilePaused = false;
   QTimer m_reloadAudioTimer;
   QSet<QString> m_audioDevices;
   bool m_streamSwitchImminent;

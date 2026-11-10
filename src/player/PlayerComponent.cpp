@@ -65,6 +65,15 @@ PlayerComponent::PlayerComponent(QObject* parent)
     DisplayComponent::Get().restorePreviousVideoMode();
     updateHdrTarget();
     m_displayRestoredWhilePaused = true;
+    // A paused passthrough stream keeps the HDMI sink and PipeWire refuses every PCM stream on it,
+    // so other apps (Waydroid) get no sound. Deselecting the audio track closes mpv's output;
+    // audio-spdif="" alone isn't enough, the AC3 transcoding filter (@ac3) keeps it in passthrough.
+    if (!m_passthroughCodecs.isEmpty())
+    {
+      qInfo() << "Paused in the background: releasing passthrough audio";
+      m_mpv->setProperty("aid", "no");
+      m_audioReleasedWhilePaused = true;
+    }
   });
 
   connect(&DisplayComponent::Get(), &DisplayComponent::refreshRateChanged, this, &PlayerComponent::onRefreshRateChange);
@@ -535,6 +544,7 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       m_inPlayback = false;
       m_pausedRestoreTimer.stop();
       m_displayRestoredWhilePaused = false;
+      m_audioReleasedWhilePaused = false; // the next file selects its track in on_preloaded
       m_playbackCanceled = false;
       m_playbackError = "";
 
@@ -568,6 +578,8 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
       {
         m_paused = !!*static_cast<int*>(prop->data);
         updatePausedInBackground();
+        if (!m_paused)
+          restorePassthrough();
         if (!m_paused && m_displayRestoredWhilePaused)
         {
           m_displayRestoredWhilePaused = false;
@@ -1115,6 +1127,7 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
 void PlayerComponent::setAudioStream(const QVariant &audioStream)
 {
   m_currentAudioStream = audioStream;
+  m_audioReleasedWhilePaused = false;
   reselectStream(m_currentAudioStream, MediaType::Audio);
 }
 
@@ -1275,6 +1288,17 @@ void PlayerComponent::updateAudioConfiguration()
 {
   setAudioConfiguration();
   setOtherConfiguration();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+void PlayerComponent::restorePassthrough()
+{
+  if (!m_audioReleasedWhilePaused)
+    return;
+  m_audioReleasedWhilePaused = false;
+  // mpv reopens the output and resyncs on its own (spikes/audio-pause/RESULTS.md).
+  qInfo() << "Restoring passthrough audio";
+  reselectStream(m_currentAudioStream, MediaType::Audio);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
