@@ -628,6 +628,18 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
         qWarning() << qPrintable(logline);
       else
         qCritical() << qPrintable(logline);
+
+      // mpv bug #8403: when the passthrough output fails, the PCM fallback never opens an audio
+      // output and playback never starts. A zero-length seek makes mpv open it.
+      if (!strcmp(msg->prefix, "cplayer") && !strncmp(msg->text, "Falling back to PCM output", 26))
+      {
+        qWarning() << "Passthrough audio output failed, nudging mpv to open the PCM output (mpv #8403)";
+        QMetaObject::invokeMethod(this, [this]
+        {
+          // exact: hr-seek is off by default here
+          m_mpv->command(QStringList() << "seek" << "0" << "relative+exact");
+        }, Qt::QueuedConnection);
+      }
       break;
     }
     case MPV_EVENT_CLIENT_MESSAGE:
