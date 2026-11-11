@@ -70,6 +70,9 @@ bool DisplayComponent::componentInitialize()
     connect(app, SIGNAL(screenAdded(QScreen*)), this, SLOT(monitorChange()));
     connect(app, SIGNAL(screenRemoved(QScreen*)), this,  SLOT(monitorChange()));
 
+    // Quitting during playback would leave the display in the video's mode (X11 keeps it).
+    connect(app, &QGuiApplication::aboutToQuit, this, &DisplayComponent::restorePreviousVideoMode);
+
     for(QScreen *screen : app->screens())
     {
       connect(screen, SIGNAL(refreshRateChanged(qreal)), this, SLOT(monitorChange()));
